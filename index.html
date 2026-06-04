@@ -8,14 +8,15 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #1a472a; display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: Arial, sans-serif; }
         canvas { border: 3px solid gold; border-radius: 10px; max-width: 100%; height: auto; }
-        #loading { color: white; text-align: center; margin-top: 20px; }
+        #loading { color: white; text-align: center; margin-top: 20px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px; }
     </style>
 </head>
 <body>
     <canvas id="canvas" width="1000" height="700"></canvas>
-    <div id="loading">Подключение к серверу Photon...</div>
+    <div id="loading">Загрузка Photon SDK...</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@photonengine/photon@4.1.1/photon.js"></script>
+    <!-- Подключаем Photon SDK из правильного источника -->
+    <script src="https://cdn.jsdelivr.net/npm/@photonengine/photon@4.1.1/dist/photon.min.js"></script>
     <script>
         // ⚡ ТВОЙ APP ID ИЗ ФОТОНА ⚡
         const APP_ID = "53b392a9-ecc4-4edb-808b-1841b1933aa3";
@@ -32,79 +33,110 @@
         const ctx = canvas.getContext('2d');
         const loadingDiv = document.getElementById('loading');
         
+        // Ждём загрузки Photon
+        function waitForPhoton() {
+            if (typeof Photon !== 'undefined') {
+                loadingDiv.innerHTML = "Photon загружен! Подключение...";
+                initPhoton();
+            } else {
+                setTimeout(waitForPhoton, 500);
+            }
+        }
+        
         // Инициализация Photon
         function initPhoton() {
-            photon = new Photon.PhotonClient(APP_ID, "1.0");
-            photon.connect();
-            
-            photon.onConnectionStateChange = (state) => {
-                if (state === Photon.ConnectionState.Connected) {
-                    loadingDiv.innerHTML = "Подключено! Создание комнаты...";
-                    // Используем фиксированное имя комнаты, чтобы все попадали в одну игру
-                    room = photon.joinOrCreateRoom("football_main_room");
+            try {
+                // Создаём клиент Photon
+                photon = new Photon.PhotonClient(APP_ID, Photon.ConnectionProtocol.Udp);
+                
+                // Обработка подключения
+                photon.onConnectionStateChange = (state) => {
+                    console.log("Connection state:", state);
+                    if (state === Photon.ConnectionState.Connected) {
+                        loadingDiv.innerHTML = "Подключено! Вход в комнату...";
+                        // Присоединяемся к комнате
+                        photon.joinRandomOrCreateRoom("football_room", 20);
+                    } else if (state === Photon.ConnectionState.Disconnected) {
+                        loadingDiv.innerHTML = "Потеря связи. Переподключение...";
+                        setTimeout(() => photon.connect(), 3000);
+                    }
+                };
+                
+                // Обработка входа в комнату
+                photon.onJoinRoom = (newRoom) => {
+                    room = newRoom;
+                    loadingDiv.innerHTML = "В игре! Управление: стрелки/WASD";
+                    myId = photon.userId;
                     
-                    room.onJoin = () => {
-                        loadingDiv.innerHTML = "Игра началась! Управление: стрелки или WASD";
-                        myId = photon.userId;
-                        // Определяем команду по количеству игроков
-                        const playerCount = Object.keys(room.players).length;
-                        myTeam = playerCount % 2 === 1 ? "red" : "blue";
-                        
-                        // Добавляем себя в список игроков
-                        players[myId] = {
-                            x: 500,
-                            y: 350,
-                            team: myTeam
-                        };
-                        
-                        // Отправляем свои координаты каждые 30 мс
-                        if (moveInterval) clearInterval(moveInterval);
-                        moveInterval = setInterval(() => {
-                            if (room && myId && players[myId]) {
-                                room.send("move", { 
-                                    id: myId,
-                                    x: players[myId].x, 
-                                    y: players[myId].y,
-                                    team: players[myId].team
-                                });
-                            }
-                        }, 30);
+                    // Определяем команду
+                    const playerList = room.getPlayersList();
+                    const playerCount = playerList ? playerList.length : 1;
+                    myTeam = playerCount % 2 === 1 ? "red" : "blue";
+                    
+                    // Добавляем себя
+                    players[myId] = {
+                        x: 500,
+                        y: 350,
+                        team: myTeam
                     };
                     
-                    room.onPlayerJoin = (player) => {
-                        // Добавляем нового игрока
-                        const playerCount = Object.keys(room.players).length;
+                    // Отправляем свои координаты
+                    if (moveInterval) clearInterval(moveInterval);
+                    moveInterval = setInterval(() => {
+                        if (room && myId && players[myId]) {
+                            const data = { 
+                                id: myId,
+                                x: players[myId].x, 
+                                y: players[myId].y,
+                                team: players[myId].team
+                            };
+                            room.sendEvent("move", data, Photon.ReceiverGroup.All);
+                        }
+                    }, 50);
+                };
+                
+                // Обработка событий от других игроков
+                photon.onEvent = (eventCode, data, senderId) => {
+                    if (eventCode === 1 && data) { // 1 = наш кастомный event
+                        const eventData = JSON.parse(data);
+                        if (eventData.id && eventData.id !== myId) {
+                            if (!players[eventData.id]) {
+                                players[eventData.id] = { x: eventData.x, y: eventData.y, team: eventData.team };
+                            } else {
+                                players[eventData.id].x = eventData.x;
+                                players[eventData.id].y = eventData.y;
+                                players[eventData.id].team = eventData.team;
+                            }
+                        }
+                    }
+                };
+                
+                // Обработка ухода игроков
+                photon.onPlayerLeftRoom = (player) => {
+                    if (player && player.userId) {
+                        delete players[player.userId];
+                    }
+                };
+                
+                // Обработка прихода игроков
+                photon.onPlayerJoinedRoom = (player) => {
+                    if (player && player.userId && player.userId !== myId) {
+                        const playerCount = Object.keys(players).length;
                         players[player.userId] = {
                             x: Math.random() * 800 + 100,
                             y: Math.random() * 500 + 100,
                             team: playerCount % 2 === 0 ? "red" : "blue"
                         };
-                    };
-                    
-                    room.onPlayerLeave = (player) => {
-                        delete players[player.userId];
-                    };
-                    
-                    room.onMessage = (senderId, event, data) => {
-                        if (event === "move" && data) {
-                            if (!players[data.id]) {
-                                players[data.id] = { x: data.x, y: data.y, team: data.team };
-                            } else {
-                                players[data.id].x = data.x;
-                                players[data.id].y = data.y;
-                                players[data.id].team = data.team;
-                            }
-                        }
-                        if (event === "ball" && data) {
-                            ball.x = data.x;
-                            ball.y = data.y;
-                        }
-                    };
-                } else if (state === Photon.ConnectionState.Disconnected) {
-                    loadingDiv.innerHTML = "Потеря связи с сервером. Переподключение...";
-                    setTimeout(() => initPhoton(), 3000);
-                }
-            };
+                    }
+                };
+                
+                // Подключаемся
+                photon.connect();
+                
+            } catch (e) {
+                loadingDiv.innerHTML = "Ошибка подключения: " + e.message;
+                console.error(e);
+            }
         }
         
         // Управление
@@ -112,7 +144,7 @@
         document.addEventListener('keydown', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = true; });
         document.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = false; });
         
-        // Движение
+        // Локальное движение
         setInterval(() => {
             if (!room || !myId || !players[myId]) return;
             let dx = 0, dy = 0;
@@ -171,10 +203,15 @@
             ctx.fillStyle = 'black';
             ctx.font = '16px Arial';
             ctx.fillText('⚽', ball.x-7, ball.y+5);
+            
+            // Отображаем количество игроков
+            ctx.font = '14px Arial';
+            ctx.fillStyle = 'white';
+            ctx.fillText('Игроков: ' + Object.keys(players).length, 20, 30);
         }
         
         setInterval(draw, 30);
-        initPhoton();
+        waitForPhoton();
     </script>
 </body>
 </html>
