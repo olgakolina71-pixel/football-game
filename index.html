@@ -1,461 +1,155 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>Футбол - 70 режимов</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Футбол 70 режимов - Photon</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
-        body { background: linear-gradient(135deg, #1a472a, #0a2a1a); display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: 'Segoe UI', sans-serif; padding: 10px; }
-        
-        .login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); display: flex; justify-content: center; align-items: center; z-index: 1000; overflow-y: auto; }
-        .login-card { background: linear-gradient(135deg, #2c3e50, #1a1a2e); padding: 20px; border-radius: 30px; text-align: center; border: 3px solid #ffd700; max-width: 95%; width: 550px; max-height: 90vh; overflow-y: auto; }
-        h1 { color: #ffd700; margin-bottom: 10px; font-size: 22px; }
-        .subtitle { color: #bdc3c7; font-size: 11px; margin-bottom: 15px; }
-        
-        .modes-selector { background: rgba(0,0,0,0.5); border-radius: 15px; padding: 10px; margin: 10px 0; max-height: 400px; overflow-y: auto; }
-        .modes-selector h3 { color: #ffd700; font-size: 14px; margin-bottom: 10px; }
-        .category { margin: 10px 0; border: 1px solid rgba(255,215,0,0.3); border-radius: 10px; overflow: hidden; }
-        .category-title { color: #ffd700; font-size: 13px; cursor: pointer; padding: 10px; background: rgba(255,255,255,0.1); font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
-        .category-title:hover { background: rgba(255,215,0,0.2); }
-        .category-toggle { font-size: 12px; transition: transform 0.2s; }
-        .category-modes { display: none; flex-wrap: wrap; gap: 5px; padding: 10px; background: rgba(0,0,0,0.3); max-height: 200px; overflow-y: auto; }
-        .category-modes.open { display: flex; }
-        .mode-checkbox { display: inline-flex; align-items: center; background: rgba(255,255,255,0.1); border-radius: 20px; padding: 4px 10px; font-size: 10px; cursor: pointer; }
-        .mode-checkbox input { margin-right: 5px; width: 14px; height: 14px; cursor: pointer; }
-        .mode-checkbox span { color: white; font-size: 10px; }
-        
-        .select-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; justify-content: center; }
-        .select-buttons button { flex: 1; min-width: 70px; padding: 6px; font-size: 11px; background: #34495e; color: white; border: none; border-radius: 8px; cursor: pointer; }
-        .select-buttons button:active { transform: scale(0.97); }
-        
-        .status { background: rgba(0,0,0,0.5); padding: 8px; border-radius: 10px; margin: 10px 0; color: #2ecc71; font-size: 12px; }
-        button { width: 100%; padding: 12px; margin: 6px 0; font-size: 16px; font-weight: bold; border: none; border-radius: 12px; cursor: pointer; transition: transform 0.1s; }
-        button:active { transform: scale(0.97); }
-        .btn-create { background: linear-gradient(135deg, #27ae60, #2ecc71); color: white; }
-        .btn-join { background: linear-gradient(135deg, #2980b9, #3498db); color: white; }
-        
-        .code-display { background: rgba(0,0,0,0.8); padding: 12px; border-radius: 12px; margin: 12px 0; }
-        .code-digits { font-size: 42px; font-family: monospace; letter-spacing: 8px; color: #ffd700; font-weight: bold; }
-        .numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
-        .num-key { background: #34495e; color: white; font-size: 24px; padding: 12px; margin: 0; }
-        .num-key.clear { background: #e74c3c; grid-column: span 2; }
-        .error { color: #e74c3c; margin-top: 8px; font-size: 12px; }
-        
-        .game-screen { display: none; text-align: center; }
-        canvas { border: 3px solid #ffd700; border-radius: 10px; max-width: 100%; height: auto; }
-        .game-info { margin-top: 10px; background: rgba(0,0,0,0.8); padding: 8px 12px; border-radius: 15px; color: white; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; }
-        .score { font-size: 18px; font-weight: bold; }
-        .score span { color: #ffd700; font-size: 24px; }
-        .mode-info { background: #8e44ad; padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .winner-message { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: linear-gradient(135deg, #ffd700, #ff8c00); color: #1a1a2e; padding: 15px 30px; border-radius: 30px; font-size: 28px; font-weight: bold; z-index: 200; display: none; }
-        .leave-btn { position: fixed; top: 20px; right: 20px; background: #e74c3c; color: white; border: none; padding: 8px 16px; border-radius: 25px; font-weight: bold; cursor: pointer; z-index: 100; width: auto; font-size: 14px; }
-        
-        @keyframes goalFlash { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.5); } }
-        .goal-flash { animation: goalFlash 0.3s ease; }
-        @keyframes modeChange { 0% { transform: scale(1); background: #8e44ad; } 50% { transform: scale(1.05); background: #ffd700; color: #1a1a2e; } 100% { transform: scale(1); } }
-        .mode-change { animation: modeChange 0.4s ease; }
-        
-        .selected-count { font-size: 11px; color: #ffd700; margin-top: 5px; }
-        
-        @media (max-width: 768px) { .code-digits { font-size: 32px; letter-spacing: 4px; } .num-key { padding: 10px; font-size: 20px; } .mode-info { max-width: 180px; } .select-buttons button { font-size: 9px; min-width: 55px; } .mode-checkbox span { font-size: 8px; } }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #1a472a; display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: Arial, sans-serif; }
+        canvas { border: 3px solid gold; border-radius: 10px; max-width: 100%; height: auto; }
+        #loading { color: white; text-align: center; margin-top: 20px; }
     </style>
 </head>
 <body>
-    <div class="login-screen" id="loginScreen">
-        <div class="login-card">
-            <h1>⚽ ФУТБОЛ 70 РЕЖИМОВ ⚽</h1>
-            <div class="subtitle">🎲 5-12 режимов ОДНОВРЕМЕННО! 🎲</div>
-            
-            <div class="modes-selector">
-                <h3>📋 ВЫБЕРИ РЕЖИМЫ ДЛЯ ЛОББИ (нажми на категорию чтобы открыть):</h3>
-                <div class="select-buttons">
-                    <button id="selectAllBtn">✅ ВСЕ</button>
-                    <button id="deselectAllBtn">❌ ОЧИСТИТЬ</button>
-                </div>
-                <div id="categoriesContainer"></div>
-                <div class="select-buttons">
-                    <button id="selectBaseBtn">🔹 Базовые</button>
-                    <button id="selectSpecialBtn">🔸 Специальные</button>
-                    <button id="selectMagicBtn">🔮 Магические</button>
-                    <button id="selectObstacleBtn">⚠️ Препятствия</button>
-                    <button id="selectFunnyBtn">😂 Смешные</button>
-                    <button id="selectCoolBtn">⭐ Прикольные</button>
-                </div>
-                <div class="selected-count" id="selectedCount">Выбрано: 70 режимов</div>
-            </div>
-            
-            <div class="status" id="status">🔄 Подключение...</div>
-            <button class="btn-create" id="createBtn">🎮 СОЗДАТЬ ЛОББИ</button>
-            
-            <div class="code-display"><div class="code-digits" id="codeDisplay">____</div></div>
-            <div class="numpad">
-                <button class="num-key" data-num="1">1</button> <button class="num-key" data-num="2">2</button> <button class="num-key" data-num="3">3</button>
-                <button class="num-key" data-num="4">4</button> <button class="num-key" data-num="5">5</button> <button class="num-key" data-num="6">6</button>
-                <button class="num-key" data-num="7">7</button> <button class="num-key" data-num="8">8</button> <button class="num-key" data-num="9">9</button>
-                <button class="num-key clear" id="clearBtn">🗑️ ОЧИСТИТЬ</button> <button class="num-key" data-num="0">0</button>
-            </div>
-            <button class="btn-join" id="joinBtn">🔑 ПОДКЛЮЧИТЬСЯ</button>
-            <div class="error" id="error"></div>
-        </div>
-    </div>
-    
-    <div class="game-screen" id="gameScreen">
-        <canvas id="canvas" width="1000" height="700"></canvas>
-        <div class="game-info">
-            <div class="score">🔴 <span id="redScore">0</span> : <span id="blueScore">0</span> 🔵</div>
-            <div class="mode-info" id="modeInfo">🟢 Загрузка...</div>
-            <div class="lobby-info" id="lobbyCode"></div>
-        </div>
-    </div>
-    
-    <div class="winner-message" id="winnerMessage"></div>
-    <button class="leave-btn" id="leaveBtn" style="display: none;">🚪 ВЫЙТИ</button>
-    
-    <script src="/socket.io/socket.io.js"></script>
+    <canvas id="canvas" width="1000" height="700"></canvas>
+    <div id="loading">Подключение к серверу...</div>
+
+    <!-- Подключаем Photon SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@photonengine/photon@4.1.1/photon.js"></script>
     <script>
-        const socket = io({ transports: ['websocket', 'polling'], reconnection: true, reconnectionAttempts: 10, reconnectionDelay: 1000 });
+        // ⚡ ТВОЙ APP ID - ВСТАВЬ СЮДА ⚡
+        const APP_ID = "53b392a9-ecc4-4edb-808b-1841b1933aa3";
         
-        let currentLobby = null, myId = null, myTeam = null, players = {}, ball = { x: 500, y: 350, vx: 0, vy: 0 };
-        let redScore = 0, blueScore = 0, currentMode = { name: "🟢 Нормальный", ballSize: 12, playerSpeed: 5 };
-        let lobbyCode = '', enteredCode = '';
-        
-        // ВСЕ 70 РЕЖИМОВ
-        const ALL_MODES = [
-            // Базовые 1-10
-            { id: 0, name: "🟢 Нормальный", category: "base" }, { id: 1, name: "🔴 Огромный мяч", category: "base" },
-            { id: 2, name: "⚡ Супер скорость", category: "base" }, { id: 3, name: "❄️ Лёд", category: "base" },
-            { id: 4, name: "🎈 Воздушный мяч", category: "base" }, { id: 5, name: "🐢 Черепахи", category: "base" },
-            { id: 6, name: "🎯 Точный удар", category: "base" }, { id: 7, name: "🪶 Перо", category: "base" },
-            { id: 8, name: "🧱 Стена", category: "base" }, { id: 9, name: "🌀 Турбо", category: "base" },
-            // Специальные 11-20
-            { id: 10, name: "🔄 Реверс", category: "special" }, { id: 11, name: "🎪 Батут", category: "special" },
-            { id: 12, name: "📏 Узкие ворота", category: "special" }, { id: 13, name: "🏓 Пинг-понг", category: "special" },
-            { id: 14, name: "🌪️ Вихрь", category: "special" }, { id: 15, name: "🔨 Молот", category: "special" },
-            { id: 16, name: "🦋 Бабочка", category: "special" }, { id: 17, name: "⛓️ Цепь", category: "special" },
-            { id: 18, name: "🔥 Фаербол", category: "special" }, { id: 19, name: "🌟 Легендарный", category: "special" },
-            // Магические 21-30
-            { id: 20, name: "🧲 Магнит", category: "magic" }, { id: 21, name: "🦘 Кенгуру", category: "magic" },
-            { id: 22, name: "💣 Бомба", category: "magic" }, { id: 23, name: "🎲 Хаос", category: "magic" },
-            { id: 24, name: "🏃 Марафон", category: "magic" }, { id: 25, name: "🛡️ Щит", category: "magic" },
-            { id: 26, name: "⚡ Молния", category: "magic" }, { id: 27, name: "🎭 Маскировка", category: "magic" },
-            { id: 28, name: "🔮 Магия", category: "magic" }, { id: 29, name: "💀 Смертельный", category: "magic" },
-            // Препятствия 31-40
-            { id: 30, name: "🔫 Лазеры", category: "obstacle" }, { id: 31, name: "🪤 Капканы", category: "obstacle" },
-            { id: 32, name: "🌊 Цунами", category: "obstacle" }, { id: 33, name: "🤖 Дроны", category: "obstacle" },
-            { id: 34, name: "💨 Ветряки", category: "obstacle" }, { id: 35, name: "🎰 Слот", category: "obstacle" },
-            { id: 36, name: "☠️ Ад", category: "obstacle" }, { id: 37, name: "🌿 Высокая трава", category: "obstacle" },
-            { id: 38, name: "🧱 Лабиринт", category: "obstacle" }, { id: 39, name: "🫥 Невидимые игроки", category: "obstacle" },
-            // Смешные 41-50
-            { id: 40, name: "🐔 Курица", category: "funny" }, { id: 41, name: "💩 Скользкий", category: "funny" },
-            { id: 42, name: "🎈 Гелий", category: "funny" }, { id: 43, name: "🍌 Банановая кожура", category: "funny" },
-            { id: 44, name: "🎺 Туман", category: "funny" }, { id: 45, name: "🐌 Улитка", category: "funny" },
-            { id: 46, name: "🦄 Единорог", category: "funny" }, { id: 47, name: "⭐ Звезда", category: "funny" },
-            { id: 48, name: "🎨 Краски", category: "funny" }, { id: 49, name: "🎮 8-bit", category: "funny" },
-            // Прикольные 51-60
-            { id: 50, name: "🔊 Эхо", category: "cool" }, { id: 51, name: "🔮 Будущее", category: "cool" },
-            { id: 52, name: "🏆 Турнир", category: "cool" }, { id: 53, name: "🔄 Вращающееся поле", category: "cool" },
-            { id: 54, name: "🧬 Клонирование", category: "cool" }, { id: 55, name: "📡 Радар", category: "cool" },
-            { id: 56, name: "🎯 Гравитация", category: "cool" }, { id: 57, name: "🎪 Цирк", category: "cool" },
-            { id: 58, name: "🎰 Джекпот", category: "cool" }, { id: 59, name: "🌟 Мега-микс", category: "cool" }
-        ];
-        
-        const categories = {
-            base: { name: "🔹 Базовые (1-10)", modes: [] },
-            special: { name: "🔸 Специальные (11-20)", modes: [] },
-            magic: { name: "🔮 Магические (21-30)", modes: [] },
-            obstacle: { name: "⚠️ Препятствия (31-40)", modes: [] },
-            funny: { name: "😂 Смешные (41-50)", modes: [] },
-            cool: { name: "⭐ Прикольные (51-60)", modes: [] }
-        };
-        
-        for (let mode of ALL_MODES) {
-            if (categories[mode.category]) categories[mode.category].modes.push(mode);
-        }
-        
-        let categoryStates = {};
-        
-        function buildCategories() {
-            const container = document.getElementById('categoriesContainer');
-            container.innerHTML = '';
-            for (let catKey in categories) {
-                const cat = categories[catKey];
-                if (cat.modes.length === 0) continue;
-                
-                const catDiv = document.createElement('div');
-                catDiv.className = 'category';
-                catDiv.innerHTML = `
-                    <div class="category-title" data-cat="${catKey}">
-                        <span>📁 ${cat.name} (${cat.modes.length})</span>
-                        <span class="category-toggle">▼</span>
-                    </div>
-                    <div class="category-modes" id="cat-${catKey}"></div>
-                `;
-                container.appendChild(catDiv);
-                
-                const modesDiv = catDiv.querySelector(`.category-modes`);
-                for (let mode of cat.modes) {
-                    const label = document.createElement('label');
-                    label.className = 'mode-checkbox';
-                    label.innerHTML = `<input type="checkbox" value="${mode.id}" checked> <span>${mode.name}</span>`;
-                    modesDiv.appendChild(label);
-                }
-                
-                const titleDiv = catDiv.querySelector('.category-title');
-                titleDiv.onclick = () => {
-                    const modesContainer = catDiv.querySelector('.category-modes');
-                    const isOpen = modesContainer.classList.contains('open');
-                    if (isOpen) {
-                        modesContainer.classList.remove('open');
-                        titleDiv.querySelector('.category-toggle').innerHTML = '▶';
-                    } else {
-                        modesContainer.classList.add('open');
-                        titleDiv.querySelector('.category-toggle').innerHTML = '▼';
-                    }
-                };
-                
-                // По умолчанию открываем первую категорию
-                if (catKey === 'base') {
-                    modesDiv.classList.add('open');
-                }
-            }
-            updateSelectedCount();
-        }
-        
-        function updateSelectedCount() {
-            const count = document.querySelectorAll('.mode-checkbox input:checked').length;
-            document.getElementById('selectedCount').innerHTML = `📋 Выбрано: ${count} из 70 режимов`;
-        }
-        
-        function getSelectedModes() {
-            const selected = [];
-            document.querySelectorAll('.mode-checkbox input:checked').forEach(cb => selected.push(parseInt(cb.value)));
-            return selected;
-        }
-        
-        // Обработчики кнопок
-        document.getElementById('selectAllBtn').onclick = () => {
-            document.querySelectorAll('.mode-checkbox input').forEach(cb => cb.checked = true);
-            updateSelectedCount();
-        };
-        document.getElementById('deselectAllBtn').onclick = () => {
-            document.querySelectorAll('.mode-checkbox input').forEach(cb => cb.checked = false);
-            updateSelectedCount();
-        };
-        document.getElementById('selectBaseBtn').onclick = () => {
-            document.querySelectorAll('.mode-checkbox input').forEach(cb => cb.checked = false);
-            document.querySelectorAll('#cat-base input').forEach(cb => cb.checked = true);
-            updateSelectedCount();
-        };
-        document.getElementById('selectSpecialBtn').onclick = () => {
-            document.querySelectorAll('.mode-checkbox input').forEach(cb => cb.checked = false);
-            document.querySelectorAll('#cat-special input').forEach(cb => cb.checked = true);
-            updateSelectedCount();
-        };
-        document.getElementById('selectMagicBtn').onclick = () => {
-            document.querySelectorAll('.mode-checkbox input').forEach(cb => cb.checked = false);
-            document.querySelectorAll('#cat-magic input').forEach(cb => cb.checked = true);
-            updateSelectedCount();
-        };
-        document.getElementById('selectObstacleBtn').onclick = () => {
-            document.querySelectorAll('.mode-checkbox input').forEach(cb => cb.checked = false);
-            document.querySelectorAll('#cat-obstacle input').forEach(cb => cb.checked = true);
-            updateSelectedCount();
-        };
-        document.getElementById('selectFunnyBtn').onclick = () => {
-            document.querySelectorAll('.mode-checkbox input').forEach(cb => cb.checked = false);
-            document.querySelectorAll('#cat-funny input').forEach(cb => cb.checked = true);
-            updateSelectedCount();
-        };
-        document.getElementById('selectCoolBtn').onclick = () => {
-            document.querySelectorAll('.mode-checkbox input').forEach(cb => cb.checked = false);
-            document.querySelectorAll('#cat-cool input').forEach(cb => cb.checked = true);
-            updateSelectedCount();
-        };
-        
-        document.querySelectorAll('.mode-checkbox').forEach(cb => {
-            cb.onchange = () => updateSelectedCount();
-        });
-        
-        function updateCodeDisplay() { document.getElementById('codeDisplay').innerText = enteredCode.padEnd(4, '_'); }
-        function addDigit(num) { if (enteredCode.length < 4) { enteredCode += num; updateCodeDisplay(); document.getElementById('error').innerText = ''; } }
-        function clearCode() { enteredCode = ''; updateCodeDisplay(); document.getElementById('error').innerText = ''; }
-        
-        document.querySelectorAll('.num-key[data-num]').forEach(btn => btn.onclick = () => addDigit(btn.getAttribute('data-num')));
-        document.getElementById('clearBtn').onclick = clearCode;
-        
-        socket.on('connect', () => { document.getElementById('status').innerHTML = '✅ Подключено!'; document.getElementById('status').style.color = '#2ecc71'; });
-        socket.on('disconnect', () => { document.getElementById('status').innerHTML = '❌ Потеря связи'; document.getElementById('status').style.color = '#e74c3c'; });
-        
-        document.getElementById('createBtn').onclick = () => {
-            const selectedModes = getSelectedModes();
-            console.log('Создание лобби с режимами:', selectedModes.length);
-            socket.emit('createLobby', { selectedModes: selectedModes });
-            document.getElementById('createBtn').innerText = '⏳...';
-            setTimeout(() => document.getElementById('createBtn').innerText = '🎮 СОЗДАТЬ ЛОББИ', 2000);
-        };
-        
-        document.getElementById('joinBtn').onclick = () => {
-            if (enteredCode.length === 4) { lobbyCode = enteredCode; socket.emit('joinLobby', { code: lobbyCode }); document.getElementById('joinBtn').innerText = '⏳...'; }
-            else document.getElementById('error').innerText = '❌ Введите 4 цифры!';
-        };
-        document.getElementById('leaveBtn').onclick = () => location.reload();
-        
-        socket.on('lobbyCreated', ({ code }) => { 
-            enteredCode = code; 
-            updateCodeDisplay(); 
-            document.getElementById('error').innerHTML = '✅ Лобби создано! Код: ' + code;
-            setTimeout(() => document.getElementById('error').innerHTML = '', 3000);
-        });
-        
-        socket.on('joinSuccess', ({ code, team, players: p, ball: b, redScore: r, blueScore: bl, mode, availableModes }) => {
-            currentLobby = code; myTeam = team; players = p; ball = b; redScore = r; blueScore = bl; currentMode = mode;
-            document.getElementById('loginScreen').style.display = 'none';
-            document.getElementById('gameScreen').style.display = 'block';
-            document.getElementById('leaveBtn').style.display = 'block';
-            document.getElementById('lobbyCode').innerHTML = `Код: ${code}`;
-            for (let id in players) if (players[id].id === socket.id.slice(0, 6)) { myId = id; break; }
-            document.getElementById('joinBtn').innerText = '🔑 ПОДКЛЮЧИТЬСЯ';
-            updateUI();
-        });
-        
-        socket.on('joinError', ({ message }) => { 
-            document.getElementById('error').innerHTML = `❌ ${message}`; 
-            document.getElementById('joinBtn').innerText = '🔑 ПОДКЛЮЧИТЬСЯ'; 
-            setTimeout(() => document.getElementById('error').innerHTML = '', 3000);
-        });
-        
-        socket.on('lobbyUpdate', (data) => { 
-            players = data.players; ball = data.ball; redScore = data.redScore; blueScore = data.blueScore; 
-            currentMode = data.mode; 
-            updateUI(); 
-        });
-        
-        socket.on('goal', (data) => {
-            document.getElementById('canvas').classList.add('goal-flash');
-            setTimeout(() => document.getElementById('canvas').classList.remove('goal-flash'), 500);
-            document.getElementById('modeInfo').classList.add('mode-change');
-            setTimeout(() => document.getElementById('modeInfo').classList.remove('mode-change'), 500);
-            if (data.winner) { 
-                const winnerMsg = document.getElementById('winnerMessage'); 
-                winnerMsg.innerHTML = data.winner === 'red' ? '🏆 ПОБЕДА КРАСНЫХ! 🏆' : '🏆 ПОБЕДА СИНИХ! 🏆'; 
-                winnerMsg.style.display = 'block'; 
-                setTimeout(() => { winnerMsg.style.display = 'none'; location.reload(); }, 5000); 
-            }
-        });
-        
-        function updateUI() {
-            document.getElementById('redScore').innerText = redScore;
-            document.getElementById('blueScore').innerText = blueScore;
-            let displayName = currentMode.name;
-            if (displayName.length > 35) displayName = displayName.substring(0, 32) + '...';
-            document.getElementById('modeInfo').innerHTML = displayName;
-            if (currentMode.fire) document.getElementById('modeInfo').style.background = '#e67e22';
-            else if (currentMode.ice) document.getElementById('modeInfo').style.background = '#3498db';
-            else if (currentMode.hell) document.getElementById('modeInfo').style.background = '#c0392b';
-            else if (currentMode.ballSize > 20) document.getElementById('modeInfo').style.background = '#e74c3c';
-            else document.getElementById('modeInfo').style.background = '#8e44ad';
-        }
-        
-        const keys = { 'w': false, 's': false, 'a': false, 'd': false, 'ArrowUp': false, 'ArrowDown': false, 'ArrowLeft': false, 'ArrowRight': false };
-        document.addEventListener('keydown', (e) => { 
-            if (keys.hasOwnProperty(e.key)) { keys[e.key] = true; e.preventDefault(); } 
-            if (document.getElementById('loginScreen').style.display !== 'none') { 
-                if (e.key >= '0' && e.key <= '9') addDigit(e.key); 
-                else if (e.key === 'Backspace') { enteredCode = enteredCode.slice(0, -1); updateCodeDisplay(); } 
-            } 
-        });
-        document.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = false; });
-        
-        setInterval(() => {
-            if (!currentLobby) return;
-            let dx = 0, dy = 0;
-            const speed = currentMode.playerSpeed || 5;
-            if (keys.w || keys.ArrowUp) dy -= speed;
-            if (keys.s || keys.ArrowDown) dy += speed;
-            if (keys.a || keys.ArrowLeft) dx -= speed;
-            if (keys.d || keys.ArrowRight) dx += speed;
-            if (dx !== 0 || dy !== 0) socket.emit('move', { dx, dy });
-        }, 30);
+        let photon = null;
+        let room = null;
+        let players = {};
+        let ball = { x: 500, y: 350, vx: 0, vy: 0 };
+        let myId = null;
+        let myTeam = null;
         
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-        const ballImg = new Image(); ballImg.src = '/ball.jpg';
-        let lasersAngle = 0, drones = [];
         
-        setInterval(() => { 
-            lasersAngle += 0.02; 
-            if (currentMode.drones) { 
-                const time = Date.now() / 1000; 
-                drones = []; 
-                for (let i = 0; i < 3; i++) drones.push({ x: 300 + Math.sin(time * 1.5 + i) * 200, y: 200 + Math.cos(time * 1.2 + i) * 200 }); 
-            } 
-        }, 50);
-        
-        function draw() {
-            if (!ctx) return;
-            ctx.clearRect(0, 0, 1000, 700);
+        // Инициализация Photon
+        function initPhoton() {
+            photon = new Photon.PhotonClient(APP_ID, "1.0");
+            photon.connect();
             
-            if (currentMode.ice) { ctx.fillStyle = '#87CEEB'; ctx.fillRect(0, 0, 1000, 700); }
-            else if (currentMode.fire || currentMode.hell) { const grad = ctx.createLinearGradient(0, 0, 1000, 700); grad.addColorStop(0, '#ff4500'); grad.addColorStop(1, '#ff8c00'); ctx.fillStyle = grad; ctx.fillRect(0, 0, 1000, 700); }
-            else { const gradient = ctx.createLinearGradient(0, 0, 0, 700); gradient.addColorStop(0, '#2e8b57'); gradient.addColorStop(1, '#228b22'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, 1000, 700); }
-            
-            if (currentMode.fog) { ctx.fillStyle = 'rgba(200,200,200,0.5)'; ctx.fillRect(0, 0, 1000, 700); }
-            if (currentMode.rainbow) { const grad = ctx.createLinearGradient(0, 0, 1000, 700); grad.addColorStop(0, 'red'); grad.addColorStop(0.2, 'orange'); grad.addColorStop(0.4, 'yellow'); grad.addColorStop(0.6, 'green'); grad.addColorStop(0.8, 'blue'); grad.addColorStop(1, 'purple'); ctx.fillStyle = grad; ctx.globalAlpha = 0.3; ctx.fillRect(0, 0, 1000, 700); ctx.globalAlpha = 1; }
-            
-            if (currentMode.lasers) { for (let i = 0; i < 4; i++) { const angle = lasersAngle + i * Math.PI / 2; const x1 = 500 + Math.cos(angle) * 350, y1 = 350 + Math.sin(angle) * 250, x2 = 500 - Math.cos(angle) * 350, y2 = 350 - Math.sin(angle) * 250; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.strokeStyle = `rgba(255,0,0,0.7)`; ctx.lineWidth = 6; ctx.stroke(); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.strokeStyle = `rgba(255,200,0,0.9)`; ctx.lineWidth = 3; ctx.stroke(); } }
-            
-            if (currentMode.drones && drones.length) { for (let drone of drones) { ctx.beginPath(); ctx.arc(drone.x, drone.y, 15, 0, Math.PI * 2); ctx.fillStyle = 'rgba(100,100,200,0.7)'; ctx.fill(); ctx.fillStyle = 'white'; ctx.font = '16px Arial'; ctx.fillText('🤖', drone.x - 8, drone.y + 6); } }
-            
-            if (currentMode.walls) { for (let i = 0; i < 5; i++) { ctx.fillStyle = '#8B4513'; ctx.fillRect(150 + i * 150, 150, 20, 400); } }
-            
-            ctx.strokeStyle = 'white'; ctx.lineWidth = 3; ctx.strokeRect(10, 10, 980, 680); ctx.beginPath(); ctx.arc(500, 350, 70, 0, Math.PI * 2); ctx.stroke(); ctx.beginPath(); ctx.moveTo(500, 10); ctx.lineTo(500, 690); ctx.stroke();
-            
-            const goalWidth = currentMode.goalWidth || 150, goalY = 350 - goalWidth/2;
-            ctx.fillStyle = 'rgba(255,0,0,0.3)'; ctx.fillRect(0, goalY, 15, goalWidth); ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 4; ctx.strokeRect(0, goalY, 15, goalWidth);
-            ctx.fillStyle = 'rgba(0,0,255,0.3)'; ctx.fillRect(985, goalY, 15, goalWidth); ctx.strokeStyle = '#0000ff'; ctx.strokeRect(985, goalY, 15, goalWidth);
-            
-            for (let id in players) {
-                if (currentMode.grass && Math.random() > 0.4 && id !== myId) continue;
-                if (currentMode.invisible && Math.random() > 0.3 && id !== myId) continue;
-                const p = players[id];
-                ctx.beginPath(); ctx.arc(p.x, p.y, 22, 0, Math.PI * 2);
-                let color1 = p.team === 'red' ? '#ff6b6b' : '#5dade2';
-                let color2 = p.team === 'red' ? '#c0392b' : '#2471a3';
-                if (currentMode.rainbow) { color1 = `hsl(${Date.now() / 20 % 360}, 70%, 60%)`; color2 = `hsl(${Date.now() / 20 + 40 % 360}, 70%, 40%)`; }
-                const grad = ctx.createRadialGradient(p.x-5, p.y-5, 5, p.x, p.y, 22); grad.addColorStop(0, color1); grad.addColorStop(1, color2); ctx.fillStyle = grad; ctx.fill();
-                ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 2.5; ctx.stroke();
-                if (id === myId) { ctx.beginPath(); ctx.arc(p.x, p.y, 28, 0, Math.PI * 2); ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 3; ctx.stroke(); }
-            }
-            
-            const ballSize = currentMode.ballSize || 12;
-            ctx.shadowBlur = 10; ctx.shadowColor = 'black';
-            if (currentMode.grass && Math.random() > 0.5) ctx.globalAlpha = 0.5;
-            ctx.beginPath(); ctx.arc(ball.x, ball.y, ballSize, 0, Math.PI * 2); ctx.fillStyle = currentMode.fire ? '#ff6600' : '#ffffff'; ctx.fill();
-            ctx.fillStyle = '#333'; ctx.font = `${ballSize + 6}px Arial`; ctx.fillText('⚽', ball.x - ballSize/1.5, ball.y + ballSize/2);
-            ctx.globalAlpha = 1; ctx.shadowBlur = 0;
-            
-            if (currentMode.echo) { for (let i = 1; i <= 3; i++) { ctx.globalAlpha = 0.15; ctx.beginPath(); ctx.arc(ball.x - (ball.vx || 0) * i * 5, ball.y - (ball.vy || 0) * i * 5, ballSize, 0, Math.PI * 2); ctx.fill(); } ctx.globalAlpha = 1; }
-            
-            ctx.font = 'bold 42px "Segoe UI"'; ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillText(redScore, 420, 60); ctx.fillText(blueScore, 550, 60);
+            photon.onConnectionStateChange = (state) => {
+                if (state === Photon.ConnectionState.Connected) {
+                    document.getElementById('loading').innerHTML = "Подключено! Создание лобби...";
+                    // Создаём или входим в комнату (лобби с кодом)
+                    room = photon.createRoom("football_lobby_" + Math.floor(Math.random() * 10000));
+                    
+                    room.onJoin = () => {
+                        document.getElementById('loading').innerHTML = "Игра началась!";
+                        myId = photon.userId;
+                        // Определяем команду (по цвету)
+                        myTeam = Object.keys(room.players).length % 2 === 0 ? "red" : "blue";
+                        // Отправляем свои координаты
+                        setInterval(() => {
+                            if (room && myId && players[myId]) {
+                                room.send("move", { x: players[myId].x, y: players[myId].y, vx: 0, vy: 0 });
+                            }
+                        }, 50);
+                    };
+                    
+                    room.onPlayerJoin = (player) => {
+                        players[player.userId] = {
+                            x: player.userId === myId ? 400 : Math.random() * 800 + 100,
+                            y: 350,
+                            team: Object.keys(players).length % 2 === 0 ? "red" : "blue"
+                        };
+                    };
+                    
+                    room.onPlayerLeave = (player) => {
+                        delete players[player.userId];
+                    };
+                    
+                    room.onMessage = (senderId, event, data) => {
+                        if (event === "move" && data) {
+                            if (players[senderId]) {
+                                players[senderId].x = data.x;
+                                players[senderId].y = data.y;
+                            }
+                        }
+                        if (event === "ball" && data) {
+                            ball.x = data.x;
+                            ball.y = data.y;
+                        }
+                    };
+                }
+            };
         }
         
-        function animate() { draw(); requestAnimationFrame(animate); }
-        function resizeCanvas() { const ratio = 1000/700, maxW = window.innerWidth - 40, maxH = window.innerHeight - 100; let w = maxW, h = w / ratio; if (h > maxH) { h = maxH; w = h * ratio; } canvas.style.width = `${w}px`; canvas.style.height = `${h}px`; }
+        // Управление
+        const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, w: false, s: false, a: false, d: false };
+        document.addEventListener('keydown', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = true; });
+        document.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = false; });
         
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
-        animate();
-        
-        // Запускаем построение категорий
-        buildCategories();
-        
-        // Обновляем счётчик при изменении чекбоксов
-        document.addEventListener('change', (e) => {
-            if (e.target.classList && e.target.classList.contains('mode-checkbox') || e.target.type === 'checkbox') {
-                updateSelectedCount();
+        // Движение
+        setInterval(() => {
+            if (!room || !myId) return;
+            let dx = 0, dy = 0;
+            if (keys.ArrowUp || keys.w) dy -= 5;
+            if (keys.ArrowDown || keys.s) dy += 5;
+            if (keys.ArrowLeft || keys.a) dx -= 5;
+            if (keys.ArrowRight || keys.d) dx += 5;
+            if (players[myId]) {
+                players[myId].x = Math.min(Math.max(players[myId].x + dx, 40), 960);
+                players[myId].y = Math.min(Math.max(players[myId].y + dy, 40), 660);
+                room.send("move", { x: players[myId].x, y: players[myId].y });
             }
-        });
+        }, 30);
+        
+        // Отрисовка поля
+        function draw() {
+            ctx.clearRect(0, 0, 1000, 700);
+            ctx.fillStyle = '#2e8b57';
+            ctx.fillRect(0, 0, 1000, 700);
+            
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(10, 10, 980, 680);
+            ctx.beginPath();
+            ctx.arc(500, 350, 70, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(500, 10);
+            ctx.lineTo(500, 690);
+            ctx.stroke();
+            
+            ctx.fillStyle = 'rgba(255,0,0,0.3)';
+            ctx.fillRect(0, 275, 15, 150);
+            ctx.fillStyle = 'rgba(0,0,255,0.3)';
+            ctx.fillRect(985, 275, 15, 150);
+            
+            for (let id in players) {
+                const p = players[id];
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 22, 0, Math.PI * 2);
+                ctx.fillStyle = p.team === 'red' ? '#e74c3c' : '#3498db';
+                ctx.fill();
+                ctx.strokeStyle = '#ffd700';
+                ctx.stroke();
+                if (id === myId) {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 28, 0, Math.PI * 2);
+                    ctx.strokeStyle = 'yellow';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                }
+            }
+            
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, 12, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+        }
+        
+        setInterval(draw, 30);
+        initPhoton();
     </script>
 </body>
 </html>
