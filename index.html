@@ -13,12 +13,11 @@
 </head>
 <body>
     <canvas id="canvas" width="1000" height="700"></canvas>
-    <div id="loading">Подключение к серверу...</div>
+    <div id="loading">Подключение к серверу Photon...</div>
 
-    <!-- Подключаем Photon SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@photonengine/photon@4.1.1/photon.js"></script>
     <script>
-        // ⚡ ТВОЙ APP ID - ВСТАВЬ СЮДА ⚡
+        // ⚡ ТВОЙ APP ID ИЗ ФОТОНА ⚡
         const APP_ID = "53b392a9-ecc4-4edb-808b-1841b1933aa3";
         
         let photon = null;
@@ -27,9 +26,11 @@
         let ball = { x: 500, y: 350, vx: 0, vy: 0 };
         let myId = null;
         let myTeam = null;
+        let moveInterval = null;
         
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
+        const loadingDiv = document.getElementById('loading');
         
         // Инициализация Photon
         function initPhoton() {
@@ -38,28 +39,45 @@
             
             photon.onConnectionStateChange = (state) => {
                 if (state === Photon.ConnectionState.Connected) {
-                    document.getElementById('loading').innerHTML = "Подключено! Создание лобби...";
-                    // Создаём или входим в комнату (лобби с кодом)
-                    room = photon.createRoom("football_lobby_" + Math.floor(Math.random() * 10000));
+                    loadingDiv.innerHTML = "Подключено! Создание комнаты...";
+                    // Используем фиксированное имя комнаты, чтобы все попадали в одну игру
+                    room = photon.joinOrCreateRoom("football_main_room");
                     
                     room.onJoin = () => {
-                        document.getElementById('loading').innerHTML = "Игра началась!";
+                        loadingDiv.innerHTML = "Игра началась! Управление: стрелки или WASD";
                         myId = photon.userId;
-                        // Определяем команду (по цвету)
-                        myTeam = Object.keys(room.players).length % 2 === 0 ? "red" : "blue";
-                        // Отправляем свои координаты
-                        setInterval(() => {
+                        // Определяем команду по количеству игроков
+                        const playerCount = Object.keys(room.players).length;
+                        myTeam = playerCount % 2 === 1 ? "red" : "blue";
+                        
+                        // Добавляем себя в список игроков
+                        players[myId] = {
+                            x: 500,
+                            y: 350,
+                            team: myTeam
+                        };
+                        
+                        // Отправляем свои координаты каждые 30 мс
+                        if (moveInterval) clearInterval(moveInterval);
+                        moveInterval = setInterval(() => {
                             if (room && myId && players[myId]) {
-                                room.send("move", { x: players[myId].x, y: players[myId].y, vx: 0, vy: 0 });
+                                room.send("move", { 
+                                    id: myId,
+                                    x: players[myId].x, 
+                                    y: players[myId].y,
+                                    team: players[myId].team
+                                });
                             }
-                        }, 50);
+                        }, 30);
                     };
                     
                     room.onPlayerJoin = (player) => {
+                        // Добавляем нового игрока
+                        const playerCount = Object.keys(room.players).length;
                         players[player.userId] = {
-                            x: player.userId === myId ? 400 : Math.random() * 800 + 100,
-                            y: 350,
-                            team: Object.keys(players).length % 2 === 0 ? "red" : "blue"
+                            x: Math.random() * 800 + 100,
+                            y: Math.random() * 500 + 100,
+                            team: playerCount % 2 === 0 ? "red" : "blue"
                         };
                     };
                     
@@ -69,9 +87,12 @@
                     
                     room.onMessage = (senderId, event, data) => {
                         if (event === "move" && data) {
-                            if (players[senderId]) {
-                                players[senderId].x = data.x;
-                                players[senderId].y = data.y;
+                            if (!players[data.id]) {
+                                players[data.id] = { x: data.x, y: data.y, team: data.team };
+                            } else {
+                                players[data.id].x = data.x;
+                                players[data.id].y = data.y;
+                                players[data.id].team = data.team;
                             }
                         }
                         if (event === "ball" && data) {
@@ -79,6 +100,9 @@
                             ball.y = data.y;
                         }
                     };
+                } else if (state === Photon.ConnectionState.Disconnected) {
+                    loadingDiv.innerHTML = "Потеря связи с сервером. Переподключение...";
+                    setTimeout(() => initPhoton(), 3000);
                 }
             };
         }
@@ -90,18 +114,16 @@
         
         // Движение
         setInterval(() => {
-            if (!room || !myId) return;
+            if (!room || !myId || !players[myId]) return;
             let dx = 0, dy = 0;
             if (keys.ArrowUp || keys.w) dy -= 5;
             if (keys.ArrowDown || keys.s) dy += 5;
             if (keys.ArrowLeft || keys.a) dx -= 5;
             if (keys.ArrowRight || keys.d) dx += 5;
-            if (players[myId]) {
-                players[myId].x = Math.min(Math.max(players[myId].x + dx, 40), 960);
-                players[myId].y = Math.min(Math.max(players[myId].y + dy, 40), 660);
-                room.send("move", { x: players[myId].x, y: players[myId].y });
-            }
-        }, 30);
+            
+            players[myId].x = Math.min(Math.max(players[myId].x + dx, 40), 960);
+            players[myId].y = Math.min(Math.max(players[myId].y + dy, 40), 660);
+        }, 16);
         
         // Отрисовка поля
         function draw() {
@@ -146,6 +168,9 @@
             ctx.arc(ball.x, ball.y, 12, 0, Math.PI * 2);
             ctx.fillStyle = 'white';
             ctx.fill();
+            ctx.fillStyle = 'black';
+            ctx.font = '16px Arial';
+            ctx.fillText('⚽', ball.x-7, ball.y+5);
         }
         
         setInterval(draw, 30);
