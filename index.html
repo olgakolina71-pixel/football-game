@@ -1,77 +1,94 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Футбол 70 режимов - Photon</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #1a472a; display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: Arial, sans-serif; }
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+        body { background: #1a472a; display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: Arial, sans-serif; padding: 10px; }
         canvas { border: 3px solid gold; border-radius: 10px; max-width: 100%; height: auto; }
-        #loading { color: white; text-align: center; margin-top: 20px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px; }
+        #status { position: fixed; top: 20px; left: 20px; background: rgba(0,0,0,0.7); padding: 8px 15px; border-radius: 20px; color: white; font-size: 12px; z-index: 100; font-family: monospace; }
+        .controls { position: fixed; bottom: 20px; left: 20px; background: rgba(0,0,0,0.7); padding: 8px 15px; border-radius: 20px; color: white; font-size: 12px; z-index: 100; }
     </style>
 </head>
 <body>
     <canvas id="canvas" width="1000" height="700"></canvas>
-    <div id="loading">Загрузка Photon SDK...</div>
+    <div id="status">🔄 Загрузка Photon SDK...</div>
+    <div class="controls">🎮 Управление: стрелки / WASD</div>
 
-    <!-- Подключаем Photon SDK из правильного источника -->
     <script src="https://cdn.jsdelivr.net/npm/@photonengine/photon@4.1.1/dist/photon.min.js"></script>
     <script>
-        // ⚡ ТВОЙ APP ID ИЗ ФОТОНА ⚡
+        // ⚡ ТВОЙ APP ID (НЕ ТРОГАЙ) ⚡
         const APP_ID = "53b392a9-ecc4-4edb-808b-1841b1933aa3";
+        const ROOM_NAME = "football_main_room";
         
         let photon = null;
         let room = null;
-        let players = {};
-        let ball = { x: 500, y: 350, vx: 0, vy: 0 };
         let myId = null;
         let myTeam = null;
-        let moveInterval = null;
+        let players = {};
+        let ball = { x: 500, y: 350, vx: 0, vy: 0 };
+        let lastSendTime = 0;
         
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-        const loadingDiv = document.getElementById('loading');
+        const statusDiv = document.getElementById('status');
         
-        // Ждём загрузки Photon
-        function waitForPhoton() {
-            if (typeof Photon !== 'undefined') {
-                loadingDiv.innerHTML = "Photon загружен! Подключение...";
-                initPhoton();
-            } else {
-                setTimeout(waitForPhoton, 500);
-            }
-        }
+        // Управление
+        const keys = {
+            ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false,
+            w: false, s: false, a: false, d: false
+        };
         
-        // Инициализация Photon
-        function initPhoton() {
+        // ========== ИНИЦИАЛИЗАЦИЯ PHOTON ==========
+        async function initPhoton() {
             try {
-                // Создаём клиент Photon
+                statusDiv.innerHTML = "🔄 Инициализация Photon...";
+                
+                // Генерируем уникальное имя игрока (для "аутентификации")
+                const playerName = "Player_" + Math.random().toString(36).substring(2, 8);
+                
+                // Создаем клиент с опциями аутентификации
                 photon = new Photon.PhotonClient(APP_ID, Photon.ConnectionProtocol.Udp);
                 
-                // Обработка подключения
+                // Устанавливаем пользовательские данные (это и есть "аутентификация")
+                photon.setUserId(playerName);
+                photon.setNickName(playerName);
+                
+                // Подключаемся
+                photon.connect();
+                statusDiv.innerHTML = "🔄 Подключение к Photon Cloud...";
+                
+                // Обработка изменения состояния соединения
                 photon.onConnectionStateChange = (state) => {
-                    console.log("Connection state:", state);
+                    console.log("Состояние соединения:", state);
+                    
                     if (state === Photon.ConnectionState.Connected) {
-                        loadingDiv.innerHTML = "Подключено! Вход в комнату...";
-                        // Присоединяемся к комнате
-                        photon.joinRandomOrCreateRoom("football_room", 20);
+                        statusDiv.innerHTML = "🟢 Подключено! Вход в комнату...";
+                        // Присоединяемся к комнате (создаем, если нет)
+                        photon.joinOrCreateRoom(ROOM_NAME);
+                        
                     } else if (state === Photon.ConnectionState.Disconnected) {
-                        loadingDiv.innerHTML = "Потеря связи. Переподключение...";
+                        statusDiv.innerHTML = "🔴 Потеря связи. Переподключение...";
                         setTimeout(() => photon.connect(), 3000);
+                    } else if (state === Photon.ConnectionState.Error) {
+                        statusDiv.innerHTML = "❌ Ошибка подключения. Проверьте интернет.";
                     }
                 };
                 
                 // Обработка входа в комнату
                 photon.onJoinRoom = (newRoom) => {
                     room = newRoom;
-                    loadingDiv.innerHTML = "В игре! Управление: стрелки/WASD";
                     myId = photon.userId;
                     
+                    const playerCount = Object.keys(room.players).length;
+                    statusDiv.innerHTML = `✅ В игре! Игроков: ${playerCount}`;
+                    
                     // Определяем команду
-                    const playerList = room.getPlayersList();
-                    const playerCount = playerList ? playerList.length : 1;
-                    myTeam = playerCount % 2 === 1 ? "red" : "blue";
+                    const playerIds = Object.keys(room.players);
+                    const myIndex = playerIds.indexOf(myId);
+                    myTeam = myIndex % 2 === 0 ? "red" : "blue";
                     
                     // Добавляем себя
                     players[myId] = {
@@ -80,89 +97,152 @@
                         team: myTeam
                     };
                     
-                    // Отправляем свои координаты
-                    if (moveInterval) clearInterval(moveInterval);
-                    moveInterval = setInterval(() => {
-                        if (room && myId && players[myId]) {
-                            const data = { 
-                                id: myId,
-                                x: players[myId].x, 
-                                y: players[myId].y,
-                                team: players[myId].team
+                    // Добавляем других игроков
+                    for (let id in room.players) {
+                        if (id !== myId && !players[id]) {
+                            const playerList = Object.keys(players);
+                            players[id] = {
+                                x: Math.random() * 800 + 100,
+                                y: Math.random() * 500 + 100,
+                                team: playerList.length % 2 === 0 ? "red" : "blue"
                             };
-                            room.sendEvent("move", data, Photon.ReceiverGroup.All);
                         }
-                    }, 50);
+                    }
+                    
+                    // Запускаем отправку позиций
+                    startSendingPosition();
                 };
                 
                 // Обработка событий от других игроков
                 photon.onEvent = (eventCode, data, senderId) => {
-                    if (eventCode === 1 && data) { // 1 = наш кастомный event
-                        const eventData = JSON.parse(data);
-                        if (eventData.id && eventData.id !== myId) {
-                            if (!players[eventData.id]) {
-                                players[eventData.id] = { x: eventData.x, y: eventData.y, team: eventData.team };
-                            } else {
-                                players[eventData.id].x = eventData.x;
-                                players[eventData.id].y = eventData.y;
-                                players[eventData.id].team = eventData.team;
+                    if (eventCode === 1 && senderId !== myId) {
+                        try {
+                            const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+                            if (parsed.type === "move" && parsed.playerId) {
+                                if (!players[parsed.playerId]) {
+                                    players[parsed.playerId] = {
+                                        x: parsed.x,
+                                        y: parsed.y,
+                                        team: parsed.team
+                                    };
+                                } else {
+                                    players[parsed.playerId].x = parsed.x;
+                                    players[parsed.playerId].y = parsed.y;
+                                    players[parsed.playerId].team = parsed.team;
+                                }
                             }
-                        }
+                        } catch(e) {}
                     }
                 };
                 
-                // Обработка ухода игроков
-                photon.onPlayerLeftRoom = (player) => {
-                    if (player && player.userId) {
-                        delete players[player.userId];
-                    }
-                };
-                
-                // Обработка прихода игроков
+                // Новый игрок в комнате
                 photon.onPlayerJoinedRoom = (player) => {
-                    if (player && player.userId && player.userId !== myId) {
+                    if (player && player.userId !== myId && !players[player.userId]) {
                         const playerCount = Object.keys(players).length;
                         players[player.userId] = {
                             x: Math.random() * 800 + 100,
                             y: Math.random() * 500 + 100,
                             team: playerCount % 2 === 0 ? "red" : "blue"
                         };
+                        if (room) {
+                            statusDiv.innerHTML = `✅ В игре! Игроков: ${Object.keys(room.players).length}`;
+                        }
                     }
                 };
                 
-                // Подключаемся
-                photon.connect();
+                // Игрок покинул комнату
+                photon.onPlayerLeftRoom = (player) => {
+                    if (player && player.userId && players[player.userId]) {
+                        delete players[player.userId];
+                        if (room) {
+                            statusDiv.innerHTML = `✅ В игре! Игроков: ${Object.keys(room.players).length}`;
+                        }
+                    }
+                };
                 
-            } catch (e) {
-                loadingDiv.innerHTML = "Ошибка подключения: " + e.message;
-                console.error(e);
+            } catch (error) {
+                statusDiv.innerHTML = "❌ Ошибка: " + error.message;
+                console.error(error);
             }
         }
         
-        // Управление
-        const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, w: false, s: false, a: false, d: false };
-        document.addEventListener('keydown', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = true; });
-        document.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = false; });
+        // Отправка позиции
+        function startSendingPosition() {
+            setInterval(() => {
+                if (!room || !myId || !players[myId]) return;
+                
+                const now = Date.now();
+                if (now - lastSendTime < 30) return;
+                lastSendTime = now;
+                
+                const data = {
+                    type: "move",
+                    playerId: myId,
+                    x: players[myId].x,
+                    y: players[myId].y,
+                    team: players[myId].team
+                };
+                
+                room.sendEvent(1, JSON.stringify(data), Photon.ReceiverGroup.All);
+            }, 30);
+        }
         
-        // Локальное движение
+        // Управление с клавиатуры
+        document.addEventListener('keydown', (e) => {
+            if (keys.hasOwnProperty(e.key)) {
+                keys[e.key] = true;
+                e.preventDefault();
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (keys.hasOwnProperty(e.key)) keys[e.key] = false;
+        });
+        
+        // Логика движения игрока
         setInterval(() => {
-            if (!room || !myId || !players[myId]) return;
+            if (!myId || !players[myId]) return;
+            
             let dx = 0, dy = 0;
             if (keys.ArrowUp || keys.w) dy -= 5;
             if (keys.ArrowDown || keys.s) dy += 5;
             if (keys.ArrowLeft || keys.a) dx -= 5;
             if (keys.ArrowRight || keys.d) dx += 5;
             
-            players[myId].x = Math.min(Math.max(players[myId].x + dx, 40), 960);
-            players[myId].y = Math.min(Math.max(players[myId].y + dy, 40), 660);
+            if (dx !== 0 || dy !== 0) {
+                players[myId].x = Math.min(Math.max(players[myId].x + dx, 35), 965);
+                players[myId].y = Math.min(Math.max(players[myId].y + dy, 35), 665);
+            }
         }, 16);
+        
+        // Простая физика мяча
+        setInterval(() => {
+            ball.x += ball.vx;
+            ball.y += ball.vy;
+            ball.vx *= 0.98;
+            ball.vy *= 0.98;
+            
+            if (Math.abs(ball.vx) < 0.1) ball.vx = 0;
+            if (Math.abs(ball.vy) < 0.1) ball.vy = 0;
+            
+            if (ball.x < 20) { ball.x = 20; ball.vx = -ball.vx * 0.8; }
+            if (ball.x > 980) { ball.x = 980; ball.vx = -ball.vx * 0.8; }
+            if (ball.y < 20) { ball.y = 20; ball.vy = -ball.vy * 0.8; }
+            if (ball.y > 680) { ball.y = 680; ball.vy = -ball.vy * 0.8; }
+        }, 30);
         
         // Отрисовка поля
         function draw() {
             ctx.clearRect(0, 0, 1000, 700);
-            ctx.fillStyle = '#2e8b57';
+            
+            // Газон
+            const grad = ctx.createLinearGradient(0, 0, 0, 700);
+            grad.addColorStop(0, '#2e8b57');
+            grad.addColorStop(1, '#228b22');
+            ctx.fillStyle = grad;
             ctx.fillRect(0, 0, 1000, 700);
             
+            // Разметка поля
             ctx.strokeStyle = 'white';
             ctx.lineWidth = 3;
             ctx.strokeRect(10, 10, 980, 680);
@@ -174,44 +254,64 @@
             ctx.lineTo(500, 690);
             ctx.stroke();
             
+            // Ворота
             ctx.fillStyle = 'rgba(255,0,0,0.3)';
             ctx.fillRect(0, 275, 15, 150);
             ctx.fillStyle = 'rgba(0,0,255,0.3)';
             ctx.fillRect(985, 275, 15, 150);
             
+            // Игроки
             for (let id in players) {
                 const p = players[id];
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, 22, 0, Math.PI * 2);
-                ctx.fillStyle = p.team === 'red' ? '#e74c3c' : '#3498db';
+                const grad = ctx.createRadialGradient(p.x-5, p.y-5, 5, p.x, p.y, 22);
+                if (p.team === 'red') {
+                    grad.addColorStop(0, '#ff6b6b');
+                    grad.addColorStop(1, '#c0392b');
+                } else {
+                    grad.addColorStop(0, '#5dade2');
+                    grad.addColorStop(1, '#2471a3');
+                }
+                ctx.fillStyle = grad;
                 ctx.fill();
                 ctx.strokeStyle = '#ffd700';
+                ctx.lineWidth = 2.5;
                 ctx.stroke();
+                
+                // Подсветка своего игрока
                 if (id === myId) {
                     ctx.beginPath();
                     ctx.arc(p.x, p.y, 28, 0, Math.PI * 2);
-                    ctx.strokeStyle = 'yellow';
+                    ctx.strokeStyle = '#ffff00';
                     ctx.lineWidth = 3;
                     ctx.stroke();
                 }
             }
             
+            // Мяч
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = 'black';
             ctx.beginPath();
             ctx.arc(ball.x, ball.y, 12, 0, Math.PI * 2);
-            ctx.fillStyle = 'white';
+            ctx.fillStyle = '#ffffff';
             ctx.fill();
-            ctx.fillStyle = 'black';
-            ctx.font = '16px Arial';
-            ctx.fillText('⚽', ball.x-7, ball.y+5);
+            ctx.fillStyle = '#333';
+            ctx.font = '18px Arial';
+            ctx.fillText('⚽', ball.x-8, ball.y+6);
+            ctx.shadowBlur = 0;
             
-            // Отображаем количество игроков
-            ctx.font = '14px Arial';
-            ctx.fillStyle = 'white';
-            ctx.fillText('Игроков: ' + Object.keys(players).length, 20, 30);
+            // Счёт на поле
+            ctx.font = 'bold 36px "Segoe UI"';
+            ctx.fillStyle = 'rgba(255,255,255,0.8)';
+            ctx.fillText("0", 430, 55);
+            ctx.fillText("0", 550, 55);
         }
         
         setInterval(draw, 30);
-        waitForPhoton();
+        
+        // Запуск игры
+        initPhoton();
     </script>
 </body>
 </html>
